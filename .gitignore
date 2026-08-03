@@ -1,0 +1,8 @@
+# Security & Environment Secrets
+.env
+*.env
+
+# Python Virtual Environment
+venv/
+__pycache__/
+*.pyc
