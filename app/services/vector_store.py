@@ -37,7 +37,8 @@ def add_chunks_to_db(chunks: list, repo_name: str):
             "type": chunk.get("type", "code"),
             "start_line": chunk.get("start_line", 0),
             "end_line": chunk.get("end_line", 0),
-            "file_path": chunk.get("file_path", chunk.get("filename", "unknown"))  # Added this line
+            "file_path": chunk.get("file_path", chunk.get("filename", "unknown")),  # Added this line
+            "repo_name" : repo_name
         })
 
     collection.add(
@@ -48,7 +49,7 @@ def add_chunks_to_db(chunks: list, repo_name: str):
     
     return len(ids)
 
-def search_codebase(query: str, n_results: int = 3):
+def search_codebase(query: str,repo_name:str, top_k: int = 3):
     """
     Converts the user's question into a math vector and searches ChromaDB 
     for the most relevant code chunks.
@@ -56,7 +57,30 @@ def search_codebase(query: str, n_results: int = 3):
     # ChromaDB automatically uses our all-MiniLM-L6-v2 model to turn the query into numbers!
     results = collection.query(
         query_texts=[query],
-        n_results=n_results
+        n_results=top_k,
+        where ={"repo_name":repo_name}
     )
     
     return results
+
+def delete_chunks_by_file(file_path: str):
+    """
+    Deletes all vector chunks associated with a specific file path.
+    This is crucial for Incremental Indexing to prevent duplicate, stale code in the DB.
+    """
+    try:
+        # Connect to our existing collection
+        collection = chroma_client.get_collection(name="devmind_codebase")
+        
+        # ChromaDB allows us to delete based on the metadata we saved earlier!
+        # We tell it: "Delete every vector where the file_path matches this exact string."
+        collection.delete(
+            where={"file_path": file_path}
+        )
+        print(f"🗑️ [INCREMENTAL INDEX] Deleted stale vectors for: {file_path}")
+        
+    except ValueError:
+        # If the collection doesn't exist yet, we just ignore it.
+        pass
+    except Exception as e:
+        print(f"⚠️ [DB ERROR] Could not delete vectors for {file_path}: {e}")

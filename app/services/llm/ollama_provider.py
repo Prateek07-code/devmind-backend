@@ -1,6 +1,9 @@
 import httpx
 from app.services.llm.base import BaseLLMProvider
 import app.config as config
+import ollama 
+import os
+from typing import AsyncGenerator
 
 class OllamaProvider(BaseLLMProvider):
     def __init__(self):
@@ -32,3 +35,29 @@ class OllamaProvider(BaseLLMProvider):
             response.raise_for_status()
             data = response.json()
             return data.get("response", "")
+
+    async def generate_stream(
+        self,
+        prompt: str,
+        system_prompt: str = "",
+    ) -> AsyncGenerator[str, None]:
+        """
+        Streams the response from Ollama.
+        """
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+        
+        # Make sure your Ollama client call uses stream=True
+        # This will depend on the exact ollama python package you are using.
+        try:
+             async for chunk in await ollama.AsyncClient().chat(
+                 model=self.model,
+                 messages=messages,
+                 stream=True
+             ):
+                 if chunk.get('message', {}).get('content'):
+                     yield chunk['message']['content']
+        except Exception as e:
+            yield f"Error streaming from Ollama: {str(e)}"

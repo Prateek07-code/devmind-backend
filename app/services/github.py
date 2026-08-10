@@ -1,6 +1,8 @@
 import httpx
+import os
 import re
 from app.config import GITHUB_TOKEN
+from typing import List, Dict, Any
 
 def parse_github_url(url: str):
     """
@@ -85,3 +87,47 @@ async def download_file_content(owner: str, repo: str, branch: str, path: str) -
             
         # If the file fails to download, just return an empty string so the app doesn't crash
         return ""
+
+async def get_pr_modified_files(repo_full_name: str, pr_number: int) -> List[Dict[str, Any]]:
+    """
+    Calls the GitHub API to fetch the specific files changed in a Pull Request.
+    repo_full_name: format 'owner/repo' (e.g., 'pallets/flask')
+    """
+    github_token = os.getenv("GITHUB_TOKEN")
+    
+    # GitHub requires these specific headers for API authentication
+    headers = {
+        "Accept": "application/vnd.github.v3+json",
+        "Authorization": f"Bearer {github_token}"
+    }
+    
+    # The specific GitHub REST API endpoint for PR files
+    url = f"https://api.github.com/repos/{repo_full_name}/pulls/{pr_number}/files"
+    
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, headers=headers)
+        
+        if response.status_code != 200:
+            print(f"❌ [GITHUB API ERROR] Failed to fetch PR #{pr_number} files: {response.text}")
+            return []
+            
+        files_data = response.json()
+        modified_files = []
+        
+        for file in files_data:
+            filename = file.get("filename")
+            status = file.get("status") # Can be 'added', 'modified', or 'removed'
+            raw_url = file.get("raw_url")
+            
+            # We only want to process files if they match our valid code extensions
+            # (Assuming you defined ALLOWED_EXTENSIONS earlier in this file)
+            if any(filename.endswith(ext) for ext in ALLOWED_EXTENSIONS):
+                modified_files.append({
+                    "filename": filename,
+                    "status": status,
+                    "raw_url": raw_url
+                })
+                
+        print(f"✅ Found {len(modified_files)} valid code files modified in PR #{pr_number}")
+        return modified_files
+
