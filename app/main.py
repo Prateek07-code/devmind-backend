@@ -13,7 +13,7 @@ app = FastAPI(title="DevMind AI Engine")
 # Add CORS Middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # React Vite dev server
+    allow_origins=["*"],  # React Vite dev server
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
