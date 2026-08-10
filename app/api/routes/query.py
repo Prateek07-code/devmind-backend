@@ -10,6 +10,17 @@ import traceback
 
 router = APIRouter()
 
+# Simple global state to remember the currently active repository for chat
+_active_repo_identifier = None
+
+def set_active_repo(repo_identifier: str):
+    global _active_repo_identifier
+    _active_repo_identifier = repo_identifier
+
+def get_active_repo() -> str:
+    return _active_repo_identifier
+
+
 def build_augmented_prompt(question: str, retrieved_chunks: list) -> str:
     """
     Formats retrieved code chunks into context for the LLM.
@@ -32,17 +43,37 @@ def build_augmented_prompt(question: str, retrieved_chunks: list) -> str:
     """
     return prompt
 
+
+def resolve_repo_identifier(payload: QueryRequest) -> str:
+    """
+    Resolves which repository to search: uses payload.repo_url if provided,
+    otherwise falls back to the last ingested active repository.
+    """
+    global _active_repo_identifier
+    if payload.repo_url:
+        owner, repo = parse_github_url(payload.repo_url)
+        repo_identifier = f"{owner}_{repo}"
+        set_active_repo(repo_identifier)
+        return repo_identifier
+    
+    if _active_repo_identifier:
+        return _active_repo_identifier
+        
+    raise HTTPException(
+        status_code=400, 
+        detail="No repository has been ingested yet. Please ingest a repository first."
+    )
+
+
 # ------------------------------------------------------------------
 # 1. Standard Batch JSON Endpoint
 # ------------------------------------------------------------------
 @router.post("/query")
 async def ask_question(payload: QueryRequest):
     try:
-        # 1. Figure out the repo name just like we did in ingestion
-        owner, repo = parse_github_url(payload.repo_url)
-        repo_identifier = f"{owner}_{repo}"
+        repo_identifier = resolve_repo_identifier(payload)
 
-        search_results = search_codebase(query=payload.question,repo_name=repo_identifier, top_k=3)
+        search_results = search_codebase(query=payload.question, repo_name=repo_identifier, top_k=3)
         documents = search_results.get("documents", [])
 
         if not documents or not documents[0]:
@@ -81,7 +112,9 @@ async def ask_question(payload: QueryRequest):
 @router.post("/stream")
 async def ask_question_stream(payload: QueryRequest):
     try:
-        search_results = search_codebase(query=payload.question, n_results=3)
+        repo_identifier = resolve_repo_identifier(payload)
+
+        search_results = search_codebase(query=payload.question, repo_name=repo_identifier, top_k=3)
         documents = search_results.get("documents", [])
 
         if not documents or not documents[0]:
@@ -97,7 +130,6 @@ async def ask_question_stream(payload: QueryRequest):
         system_prompt = "You are DevMind AI, an intelligent coding assistant."
 
         async def sse_generator():
-            # If your llm_provider supports streaming (e.g. generate_answer_stream):
             if hasattr(llm_provider, "generate_answer_stream"):
                 async for chunk in llm_provider.generate_answer_stream(
                     prompt=augmented_prompt, 
@@ -105,7 +137,6 @@ async def ask_question_stream(payload: QueryRequest):
                 ):
                     yield f"data: {json.dumps({'text': chunk})}\n\n"
             else:
-                # Fallback if streaming isn't implemented in the factory provider yet
                 full_response = await llm_provider.generate_answer(
                     prompt=augmented_prompt,
                     system_prompt=system_prompt
