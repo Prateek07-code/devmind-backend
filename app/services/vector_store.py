@@ -19,7 +19,7 @@ def get_collection():
     # 2. Use Gemini's cloud API for embeddings (Zero local memory footprint!)
     embedding_model = embedding_functions.GoogleGenerativeAiEmbeddingFunction(
         api_key=api_key,
-        model_name="models/text-embedding-004",
+        model_name="models/gemini-embedding-001",
         task_type="RETRIEVAL_DOCUMENT"
     )
     
