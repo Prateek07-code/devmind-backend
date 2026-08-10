@@ -1,6 +1,7 @@
 import app.config as config
 from app.services.llm.base import BaseLLMProvider
 from app.services.llm.ollama_provider import OllamaProvider
+from app.services.llm.gemini_provider import GeminiCloudProvider  # <-- 1. Import it
 
 def get_llm() -> BaseLLMProvider:
     """
@@ -11,8 +12,7 @@ def get_llm() -> BaseLLMProvider:
     
     if provider_name == "ollama":
         return OllamaProvider()
-    # When you want to add OpenAI later, it is as simple as adding:
-    # elif provider_name == "openai":
-    #     return OpenAIProvider()
+    elif provider_name == "gemini":
+        return GeminiCloudProvider()  # <-- 2. Match the class name here!
     else:
         raise ValueError(f"Unsupported LLM provider: {provider_name}")
